@@ -12,10 +12,10 @@ This is tool on JS that visualizes network traceroute data on a 3D ASCII-rendere
    cd Ascii-GeoTrace-Globe
    
 3. **Install Dependencies**
-   ``bash
+   ```bash
    go mod download
 
 4. **Run the Application**
-   ``bash
+   ```bash
     Run the Application
    
