@@ -122,13 +122,12 @@ class Globe {
                     canvas.drawPoint(xi, yi, pixel);
                 }
 
-                // Check coordinates and set point at target position
+                // Highlight target points and lines
                 const isTargetPoint = targetPoints.some(point =>
                     Math.abs(theta - point.theta / (2 * PI)) < 0.005 &&
                     Math.abs(phi - point.phi / PI) < 0.005
                 );
 
-                // Check if there is a line at the current position
                 const isLinePoint = lineSegments.some(line =>
                     Math.abs(theta - line.theta / (2 * PI)) < 0.005 &&
                     Math.abs(phi - line.phi / PI) < 0.005
@@ -148,23 +147,9 @@ class Globe {
     setRotation(deltaX, deltaY) {
         const xAxis = [1, 0, 0];
         const yAxis = [0, 1, 0];
-
-        // Limit vertical rotation angle to approximately 80 degrees
-        const maxVerticalAngle = Math.PI / 2 - 0.5;
-        let newVerticalAngle = this.verticalAngle + deltaY * 0.01;
-
-        // Ensure we don't exceed allowed range
-        if (newVerticalAngle > maxVerticalAngle) {
-            newVerticalAngle = maxVerticalAngle;
-        } else if (newVerticalAngle < -maxVerticalAngle) {
-            newVerticalAngle = -maxVerticalAngle;
-        }
-
-        const qx = quaternionFromAxisAngle(xAxis, newVerticalAngle - this.verticalAngle);
+        const qx = quaternionFromAxisAngle(xAxis, deltaY * 0.01);
         const qy = quaternionFromAxisAngle(yAxis, deltaX * 0.01);
-
         this.rotation = quaternionMultiply(this.rotation, quaternionMultiply(qy, qx));
-        this.verticalAngle = newVerticalAngle;
     }
 
     setZoom(distance) {
@@ -189,7 +174,7 @@ class Globe {
     }
 }
 
-// Interpolates between two points to create a line segment
+// Interpolate between two points to create a line segment
 function interpolatePoints(start, end, numPoints = 100) {
     const points = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -210,10 +195,10 @@ function quaternionMultiply(q1, q2) {
     const [x1, y1, z1, w1] = q1;
     const [x2, y2, z2, w2] = q2;
     return [
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2,
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
     ];
 }
 
@@ -291,6 +276,7 @@ class GlobeConfig {
     }
 }
 
+const canvasElement = document.getElementById('globeDisplay');
 const canvas = new Canvas(90, 45);
 let globeConfig;
 let isDragging = false;
@@ -313,38 +299,59 @@ function startRendering() {
     setInterval(drawFrame, 16);
 }
 
-// Function to display traceroute data in a table
-function displayTraceData(traceData) {
+// Add a row to the traceroute table
+function displayTraceDataRow(hop) {
     const traceTableContainer = document.getElementById('traceTableContainer');
+    if (!document.querySelector('#traceTableContainer table')) {
+        traceTableContainer.innerHTML = '<table><tr><th>#</th><th>IP</th><th>Host</th><th>RTT</th><th>Country/City</th></tr></table>';
+    }
 
-    // Remove loading message
-    traceTableContainer.innerHTML = '';
-
-    // Create table
-    let tableHTML = '<table>';
-    tableHTML += '<tr><th>#</th><th>IP</th><th>Host</th><th>RTT</th><th>Country/City</th></tr>';
-
-    traceData.forEach((hop, index) => {
-        tableHTML += `
-            <tr>
-                <td>${index + 1}</td>
-                <td>${hop.ip || '*'}</td>
-                <td>${hop.host || '-'}</td>
-                <td>${hop.rtt || '-'}</td>
-                <td>${hop.location || '-'}</td>
-            </tr>
-        `;
-    });
-
-    tableHTML += '</table>';
-    traceTableContainer.innerHTML = tableHTML;
+    const table = traceTableContainer.querySelector('table');
+    const row = `
+        <tr>
+            <td>${hop.number}</td>
+            <td>${hop.ip || '*'}</td>
+            <td>${hop.host || '-'}</td>
+            <td>${hop.rtt || '-'}</td>
+            <td>${hop.location || '-'}</td>
+        </tr>
+    `;
+    table.insertAdjacentHTML('beforeend', row);
 }
 
-// Load Earth texture and start rendering the globe
+// Process a new hop: add to coordinates array and update globe
+function processHopData(hop) {
+    if (hop.coordinates) {
+        const coords = hop.coordinates.split(',').map(coord => coord.trim());
+        const lat = parseFloat(coords[0]);
+        const lng = parseFloat(coords[1]);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            targetCoordsArray.push({ latitude: lat, longitude: lng });
+            globeConfig.targetCoordsArray = targetCoordsArray; // Update coordinates array
+        }
+    }
+    displayTraceDataRow(hop); // Display new hop in table
+}
+
+// Start SSE connection and handle new hops
+function startSSE() {
+    const eventSource = new EventSource('/trace');
+
+    eventSource.onmessage = function(event) {
+        const hop = JSON.parse(event.data);
+        processHopData(hop);
+    };
+
+    eventSource.onerror = function(event) {
+        console.error('Error occurred in SSE connection:', event);
+        eventSource.close();
+    };
+}
+
+// Load Earth texture and initialize globe
 fetch(EARTH_TEXTURE_PATH)
     .then(response => response.text())
     .then(textureData => {
-        // Initialize globe with empty coordinates array
         globeConfig = new GlobeConfig()
             .withCamera({ x: 0, y: 0, z: 50 })
             .withRadius(30)
@@ -354,59 +361,39 @@ fetch(EARTH_TEXTURE_PATH)
 
         startRendering();
 
-        // Load traceroute data
-        fetch('/trace')
-            .then(response => response.json())
-            .then(traceData => {
-                // Process data to extract coordinates
-                traceData.forEach(hop => {
-                    if (hop.coordinates) {
-                        const coords = hop.coordinates.split(',').map(coord => coord.trim());
-                        const lat = parseFloat(coords[0]);
-                        const lng = parseFloat(coords[1]);
-                        if (!isNaN(lat) && !isNaN(lng)) {
-                            hop.latitude = lat;
-                            hop.longitude = lng;
-                        }
-                    }
-                });
-
-                // Update coordinates array
-                targetCoordsArray = traceData
-                    .filter(hop => hop.latitude != null && hop.longitude != null)
-                    .map(hop => ({
-                        latitude: hop.latitude,
-                        longitude: hop.longitude
-                    }));
-
-                // Update globe with new data
-                globeConfig.targetCoordsArray = targetCoordsArray;
-
-                // Display data in table
-                displayTraceData(traceData);
-            })
-            .catch(err => {
-                console.error('Error loading traceroute data:', err);
-                const traceTableContainer = document.getElementById('traceTableContainer');
-                traceTableContainer.innerHTML = '<div style="color: red;">Error loading traceroute data</div>';
-            });
+        // Initialize SSE after loading texture
+        startSSE();
     })
     .catch(err => {
         console.error('Error loading Earth texture:', err);
         document.getElementById('globeDisplay').innerText = 'Error loading Earth texture';
     });
 
-// Mouse event handlers
-document.addEventListener("mousedown", (event) => {
-    isDragging = true;
-    previousMouseX = event.clientX;
-    previousMouseY = event.clientY;
+// Check if mouse is within the globe canvas
+function isMouseInCanvas(event) {
+    const rect = canvasElement.getBoundingClientRect();
+    return (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+    );
+}
 
-    isAutoRotating = false;
+// Mouse event handlers for rotating and zooming the globe
+document.addEventListener("mousedown", (event) => {
+    if (isMouseInCanvas(event)) {
+        isDragging = true;
+        isInCanvas = true;
+        previousMouseX = event.clientX;
+        previousMouseY = event.clientY;
+
+        isAutoRotating = false; // Stop auto-rotation when dragging starts
+    }
 });
 
 document.addEventListener("mousemove", (event) => {
-    if (isDragging) {
+    if (isDragging && isInCanvas) {
         const deltaX = event.clientX - previousMouseX;
         const deltaY = event.clientY - previousMouseY;
 
@@ -419,14 +406,15 @@ document.addEventListener("mousemove", (event) => {
 
 document.addEventListener("mouseup", () => {
     isDragging = false;
+    isInCanvas = false;
 });
 
+// Zoom the globe using the mouse wheel
 document.addEventListener("wheel", (event) => {
     distance += event.deltaY * 0.05;
     distance = clamp(distance, 40, 80);
     globeConfig.setZoom(distance);
 });
-
 
 
 

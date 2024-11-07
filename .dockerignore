@@ -1,0 +1,8 @@
+**/tmp/*
+**/bin/*
+**/obj/*
+**/pkg/*
+.dockerignore
+Dockerfile
+*.md
+
