@@ -1,12 +1,12 @@
 # Ascii-GeoTrace-Globe
 This is tool on JS (frontend) and Go (backend) that visualizes network traceroute data on a 3D ASCII-rendered globe. It allows users to observe and analyze network path across the world.
 
-**To use this you will need a .mmdb file in assets and your token from the ipinfo account in the ipInfoToken variable in main.go**
+**To use this you will need a .mmdb file in ./assets/ and your token from the ipinfo account in the ipInfoToken variable in main.go**
 ## Installation
 
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/yourusername/Ascii-GeoTrace-Globe.git
+   git clone https://github.com/rand1l/Ascii-GeoTrace-Globe.git
 
 2. **Navigate to the Project Directory**
    ```bash
