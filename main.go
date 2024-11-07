@@ -167,7 +167,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := "204.8.234.161"
+	target := "8.8.8.8"
 
 	runTraceroute(target, 5, 30, flusher, w)
 }
