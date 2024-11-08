@@ -1,11 +1,9 @@
 const PI = Math.PI;
-
-const EARTH_TEXTURE_PATH = 'textures/earth_2_0_W400_H119.txt';
+const EARTH_TEXTURE_PATH = 'textures/earth_2_0_W400_H119.txt'; // Путь к текстуре Земли
 
 class Texture {
     constructor(day, palette = null) {
         this.day = day;
-        this.palette = palette;
     }
 
     getSize() {
@@ -29,10 +27,11 @@ class Canvas {
     }
 
     render() {
+        const isDesktop = window.innerWidth >= 769;
         const html = this.matrix.map(row => {
             return row.map(cell => {
-                if (cell.color) {
-                    return `<span style="color: ${cell.color}">${cell.char}</span>`;
+                if (cell.color === 'red' && isDesktop) {
+                    return `<span class="red-point">${cell.char}</span>`;
                 } else {
                     return cell.char;
                 }
@@ -59,15 +58,14 @@ class Globe {
         this.radius = radius;
         this.texture = texture;
         this.rotation = initialRotation;
-        this.targetCoordsArray = targetCoordsArray; // Array of objects { latitude, longitude }
-        this.verticalAngle = 0;
+        this.targetCoordsArray = targetCoordsArray; // Массив координат { latitude, longitude }
     }
 
     renderOn(canvas) {
         const light = [0.0, 999999.0, 0.0];
         const [sizeX, sizeY] = canvas.size;
 
-        // Convert target coordinates to radians for points and segments
+        // Конвертация координат цели в радианы для точек и сегментов
         const targetPoints = this.targetCoordsArray.map(coord => ({
             theta: (coord.longitude + 180) * (PI / 180),
             phi: (90 - coord.latitude) * (PI / 180)
@@ -100,8 +98,7 @@ class Globe {
                 const l = [];
                 vector(l, inter, light);
                 normalize(l);
-                const luminance = clamp(5 * dot(n, l) + 0.5, 0, 1);
-
+                clamp(5 * dot(n, l) + 0.5, 0, 1);
                 const rotated = applyQuaternion(inter, this.rotation);
 
                 let phi = -rotated[2] / this.radius / 2 + 0.5;
@@ -122,7 +119,6 @@ class Globe {
                     canvas.drawPoint(xi, yi, pixel);
                 }
 
-                // Highlight target points and lines
                 const isTargetPoint = targetPoints.some(point =>
                     Math.abs(theta - point.theta / (2 * PI)) < 0.005 &&
                     Math.abs(phi - point.phi / PI) < 0.005
@@ -174,7 +170,6 @@ class Globe {
     }
 }
 
-// Interpolate between two points to create a line segment
 function interpolatePoints(start, end, numPoints = 100) {
     const points = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -296,10 +291,14 @@ function startRendering() {
         globeConfig.renderOn(canvas);
         canvas.render();
     }
-    setInterval(drawFrame, 16);
+
+    function renderLoop() {
+        drawFrame();
+        requestAnimationFrame(renderLoop);
+    }
+    renderLoop();
 }
 
-// Add a row to the traceroute table
 function displayTraceDataRow(hop) {
     const traceTableContainer = document.getElementById('traceTableContainer');
     if (!document.querySelector('#traceTableContainer table')) {
@@ -319,7 +318,6 @@ function displayTraceDataRow(hop) {
     table.insertAdjacentHTML('beforeend', row);
 }
 
-// Process a new hop: add to coordinates array and update globe
 function processHopData(hop) {
     if (hop.coordinates) {
         const coords = hop.coordinates.split(',').map(coord => coord.trim());
@@ -327,15 +325,14 @@ function processHopData(hop) {
         const lng = parseFloat(coords[1]);
         if (!isNaN(lat) && !isNaN(lng)) {
             targetCoordsArray.push({ latitude: lat, longitude: lng });
-            globeConfig.targetCoordsArray = targetCoordsArray; // Update coordinates array
+            globeConfig.targetCoordsArray = targetCoordsArray; // Обновляем массив координат
         }
     }
-    displayTraceDataRow(hop); // Display new hop in table
+    displayTraceDataRow(hop); // Отображаем новую строку в таблице
 }
 
-// Start SSE connection and handle new hops
 function startSSE() {
-    const eventSource = new EventSource('/trace');
+    const eventSource = new EventSource('/trace'); // Убедитесь, что URL правильный
 
     eventSource.onmessage = function(event) {
         const hop = JSON.parse(event.data);
@@ -343,12 +340,11 @@ function startSSE() {
     };
 
     eventSource.onerror = function(event) {
-        console.error('Error occurred in SSE connection:', event);
+        console.error('Ошибка в SSE-соединении:', event);
         eventSource.close();
     };
 }
 
-// Load Earth texture and initialize globe
 fetch(EARTH_TEXTURE_PATH)
     .then(response => response.text())
     .then(textureData => {
@@ -361,24 +357,84 @@ fetch(EARTH_TEXTURE_PATH)
 
         startRendering();
 
-        // Initialize SSE after loading texture
         startSSE();
     })
     .catch(err => {
-        console.error('Error loading Earth texture:', err);
-        document.getElementById('globeDisplay').innerText = 'Error loading Earth texture';
+        console.error('Ошибка загрузки текстуры Земли:', err);
+        document.getElementById('globeDisplay').innerText = 'Ошибка загрузки текстуры Земли';
     });
 
-// Check if mouse is within the globe canvas
-function isMouseInCanvas(event) {
+function isPointerInCanvas(x, y) {
     const rect = canvasElement.getBoundingClientRect();
     return (
-        event.clientX >= rect.left &&
-        event.clientX <= rect.right &&
-        event.clientY >= rect.top &&
-        event.clientY <= rect.bottom
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
     );
 }
+
+function rotateGlobe(deltaX, deltaY) {
+    globeConfig.setRotation(deltaX, deltaY);
+}
+
+document.addEventListener("mousedown", (event) => {
+    if (isPointerInCanvas(event.clientX, event.clientY)) {
+        isDragging = true;
+        previousMouseX = event.clientX;
+        previousMouseY = event.clientY;
+        isAutoRotating = false;
+    }
+});
+
+document.addEventListener("mousemove", (event) => {
+    if (isDragging) {
+        const deltaX = event.clientX - previousMouseX;
+        const deltaY = event.clientY - previousMouseY;
+        rotateGlobe(deltaX, deltaY);
+        previousMouseX = event.clientX;
+        previousMouseY = event.clientY;
+    }
+});
+
+document.addEventListener("mouseup", () => {
+    isDragging = false;
+});
+
+document.addEventListener("touchstart", (event) => {
+    if (isPointerInCanvas(event.touches[0].clientX, event.touches[0].clientY)) {
+        isDragging = true;
+        previousMouseX = event.touches[0].clientX;
+        previousMouseY = event.touches[0].clientY;
+        isAutoRotating = false;
+    }
+});
+
+document.addEventListener("touchmove", (event) => {
+    if (isDragging) {
+        const deltaX = event.touches[0].clientX - previousMouseX;
+        const deltaY = event.touches[0].clientY - previousMouseY;
+        rotateGlobe(deltaX, deltaY);
+        previousMouseX = event.touches[0].clientX;
+        previousMouseY = event.touches[0].clientY;
+    }
+});
+
+document.addEventListener("touchend", () => {
+    isDragging = false;
+});
+
+document.addEventListener("wheel", (event) => {
+    distance += event.deltaY * 0.05;
+    distance = clamp(distance, 40, 80);
+    globeConfig.setZoom(distance);
+});
+
+window.addEventListener('resize', () => {
+    globeConfig.renderOn(canvas);
+    canvas.render();
+});
+
 
 // Mouse event handlers for rotating and zooming the globe
 document.addEventListener("mousedown", (event) => {
@@ -415,6 +471,5 @@ document.addEventListener("wheel", (event) => {
     distance = clamp(distance, 40, 80);
     globeConfig.setZoom(distance);
 });
-
 
 
