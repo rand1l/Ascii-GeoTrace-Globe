@@ -325,14 +325,14 @@ function processHopData(hop) {
         const lng = parseFloat(coords[1]);
         if (!isNaN(lat) && !isNaN(lng)) {
             targetCoordsArray.push({ latitude: lat, longitude: lng });
-            globeConfig.targetCoordsArray = targetCoordsArray; // Обновляем массив координат
+            globeConfig.targetCoordsArray = targetCoordsArray;
         }
     }
-    displayTraceDataRow(hop); // Отображаем новую строку в таблице
+    displayTraceDataRow(hop);
 }
 
 function startSSE() {
-    const eventSource = new EventSource('/trace'); // Убедитесь, что URL правильный
+    const eventSource = new EventSource('/trace');
 
     eventSource.onmessage = function(event) {
         const hop = JSON.parse(event.data);
@@ -340,7 +340,7 @@ function startSSE() {
     };
 
     eventSource.onerror = function(event) {
-        console.error('Ошибка в SSE-соединении:', event);
+        console.error('error sse-connect:', event);
         eventSource.close();
     };
 }
@@ -360,8 +360,8 @@ fetch(EARTH_TEXTURE_PATH)
         startSSE();
     })
     .catch(err => {
-        console.error('Ошибка загрузки текстуры Земли:', err);
-        document.getElementById('globeDisplay').innerText = 'Ошибка загрузки текстуры Земли';
+        console.error('Error loading the Earth texture:', err);
+        document.getElementById('globeDisplay').innerText = 'Error loading the Earth texture';
     });
 
 function isPointerInCanvas(x, y) {
